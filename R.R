@@ -16,24 +16,38 @@ origAddress = read.csv2("geocoding.csv", sep=",") %>%
   #filter(!is.na(full_address1)) %>% #temp until fixed
   mutate_geocode(full_address1, output="latlona") %>% 
   st_as_sf(coords = c("lon", "lat"),  crs = 4326)
+# 
+# geo_marshall = read.csv2("marshall_w1.csv", sep=",") %>% 
+#   mutate(full_address = paste0(.$mailingaddr1,", ",.$mailingcity,", ", .$mailingstate,", ",.$mailingzip)) %>% 
+#   mutate_geocode(full_address, output="latlona") %>% 
+#   st_as_sf(coords = c("lon", "lat"),  crs = 4326)
 
-geo_marshall = read.csv2("marshall_w1.csv", sep=",") %>% 
-  mutate(full_address = paste0(.$mailingaddr1,", ",.$mailingcity,", ", .$mailingstate,", ",.$mailingzip)) %>% 
-  mutate_geocode(full_address, output="latlona") %>% 
-  st_as_sf(coords = c("lon", "lat"),  crs = 4326)
-
-
-function_name <- function(df) {
+rcgeocode <- function(df) {
   df %>% 
     mutate(st_abr1 = ifelse(.$address_state1_v2==1, "CO", .$address_state1_other_v2),
            full_address1 = paste0(.$address_st1_v2,", ",.$address_town1_v2,", ", .$st_abr,", ",.$address_zip1_v2)) %>% 
-    #filter(!is.na(full_address1)) %>% #temp until fixed
     mutate_geocode(full_address1, output="latlona") %>% 
     st_as_sf(coords = c("lon", "lat"),  crs = 4326)
 }
 
-function_name(origAddress)
+#rcgeocode(origAddress)
 
+datesp = as.Date(origAddress$visit_datetime) #create date object
+sur_dates = format(datesp, format = "%b %y") #convert to mo yr format
+t1 = origAddress$movedin_mocat1_v2
+t2 = origAddress$movedin_yrcat1_v2
+moved_dates = paste0(t1," ",t2) #start code book
+cb = as.data.frame(seq(1,28))
+colnames(cb) = ("code")
+cb = mutate(cb, year=seq(1994,2021))
+ifelse(is.na(sur_dates),-9999,sur_dates) #replace NA's w/ -9999
+times_moved = as.data.frame(origAddress$movedin_mocat1_v2) %>% 
+  mutate(in_yr = origAddress$movedin_yrcat1_v2, 
+         out_mo = origAddress$movedout_mocat1_v2, 
+         out_yr = origAddress$movedout_yrcat1_v2)
+colnames(times_moved) = c("in_mo","in_yr","out_mo","out_yr")
+  
+  
 
 write.csv2(file="final_product.csv")
 test = read.csv2("final_product.csv", sep=";")
