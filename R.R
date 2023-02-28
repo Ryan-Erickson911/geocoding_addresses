@@ -17,10 +17,6 @@ origAddress = read.csv2("geocoding.csv", sep=",") %>%
   mutate_geocode(full_address1, output="latlona") %>% 
   st_as_sf(coords = c("lon", "lat"),  crs = 4326)
 # 
-# geo_marshall = read.csv2("marshall_w1.csv", sep=",") %>% 
-#   mutate(full_address = paste0(.$mailingaddr1,", ",.$mailingcity,", ", .$mailingstate,", ",.$mailingzip)) %>% 
-#   mutate_geocode(full_address, output="latlona") %>% 
-#   st_as_sf(coords = c("lon", "lat"),  crs = 4326)
 
 rcgeocode <- function(df) {
   df %>% 
