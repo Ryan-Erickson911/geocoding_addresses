@@ -17,33 +17,36 @@ marshall_map = function(sf_point_object, field, title, Stitle, Ltitle) {
     guides(colour=guide_legend(title=Ltitle)) 
 }
 
+data1<-read.csv("R:/Marshall Fire Health/marshall_w1.csv", sep=",")
+
 #geocoding - assiging lats and longs via Google API - will need key
-geo_marshall = read.csv2("marshall_w1.csv", sep=",") %>% 
+geo_marshall = data1 %>% 
   mutate(full_address = paste0(.$mailingaddr1,", ",.$mailingcity,", ", .$mailingstate,", ",.$mailingzip)) %>% 
-  mutate_geocode(full_address, output="latlona") 
+  mutate_geocode(full_address, output="latlona")
 #NA lat and long - one weird one
 what_this = geo_marshall[is.na(geo_marshall$age),]
- 
+#553 Grant Ave - Fix Address
 #mapping - only for points in CO
-co_co = st_read("/Users/RErickson/Documents/GitHub/air-quality-kriging/co_counties/geo_export_ecf55ab8-2f88-4a1f-b4fb-b21f58fb9432.shp")
+co_co = st_read("C:/github/geocoding_addresses/aqi_kriging-main/co_counties/geo_export_ecf55ab8-2f88-4a1f-b4fb-b21f58fb9432.shp")
 
 # Select only Denver metro counties and geometry - might be able to narrow down to CDP if wanted
+
 den_co = co_co %>%
   filter(county %in% c("BOULDER")) %>%
   select(county, geometry) %>% 
   st_as_sf(crs=4326)
-
+st_crs(geo_marshall)
 #raw survey data
 marshall_gc = geo_marshall %>%
   filter(!is.na(lat)) %>% 
   st_as_sf(coords = c("lon", "lat"),  crs = 4326) %>% 
-  st_filter(co_bound, .predicate=st_within)
+  st_filter(den_co)
 
 #cleaned data (no NA in impact_cat)
 marshall_gc_clean = marshall_gc %>%
   filter(impact_cat != "") %>% 
   st_as_sf(coords = c("lon", "lat"),  crs = 4326) %>% 
-  st_filter(co_bound, .predicate=st_within)
+  st_filter(den_co, .predicate=st_within)
 
 #template map - raw data, boulder county limits included
 ggplot(den_co) + 

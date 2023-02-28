@@ -1,0 +1,220 @@
+---
+title: "spatial_krige"
+author: "Emma Rieves"
+subauthor: "Ryan Erickson"
+date: "10/13/2021, Edited 2/13/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r, eval=T}
+library(gstat)
+library(maptools)
+library(tidyverse)
+library(maps)
+library(ggmap)
+library(ggsn)
+library(elevatr)
+library(sf)
+library(automap)
+library(gt)
+library(dplyr)
+```
+
+```{r}
+## read in ozone data
+
+# mda8 = weekly average of max daily 8 hour ozone levels 
+o3 = read_csv("../../../monthly_o3_pivot_18to21.csv")
+head(o3)
+
+# turn o3 into a dataframe
+# turn site names to sentence case
+# mutate vars to be * 1000 for better results
+o3 = as.data.frame(o3) %>%
+  mutate(site_name = str_to_title(site_name)) %>%
+  mutate_at(vars(-site_name, -long, -lat), ~ . * 1000)
+
+# change month names
+colnames(o3)[4:51] = format(as.Date(colnames(o3)[4:51]), "%b %Y")
+
+# preview data
+#head(o3)
+
+#summary(o3)
+```
+
+
+```{r}
+# Review NAs; flag ones to delete
+# Aspen Park, Briggsdale, Deadman, Evergreen, Pawnee Buttes, Plateville Atmospheric Observatory, US Air Force
+o3 %>%
+  group_by(site_name) %>%
+  summarise_all(~sum(is.na(.))) %>%
+  transmute(site_name, sumNA = rowSums(.[-1]))
+```
+
+
+
+```{r}
+# Remove missing obs
+o3 = o3[!(o3$site_name=="Aspen Park" | o3$site_name=="Evergreen" | o3$site_name=="Welch"),]
+```
+
+
+```{r}
+# project stations
+## need to get these to add
+
+# set projection string
+prg = "+proj=utm +zone=13"
+o3 = o3 %>% 
+  filter(!is.na(long))
+coordinates(o3) = c('long', 'lat')
+proj4string(o3) = CRS(SRS_string = "EPSG:4326")
+o3_projected = spTransform(o3, CRS(prg))
+#o3_projected
+
+
+# read in CO counties shp
+# source: CDPHE https://data-cdphe.opendata.arcgis.com/datasets/CDPHE::colorado-county-boundaries/about
+co_co = st_read("/Users/RErickson/Documents/GitHub/air-quality-kriging/co_counties/geo_export_ecf55ab8-2f88-4a1f-b4fb-b21f58fb9432.shp")
+
+# Select only Denver metro counties and geometry
+den_co = co_co %>%
+  filter(county %in% c("ADAMS","ARAPAHOE","BOULDER","BROOMFIELD","DENVER","DOUGLAS","JEFFERSON")) %>%
+  dplyr::select(county, geometry)
+
+# convert to a spatial object, reproject
+den_co = as(den_co, "Spatial")
+
+den_projected = spTransform(den_co, CRS(prg))
+#summary(den_projected)
+
+
+# create a spatial pixels grid of Denver
+# currently the spatial resolution is low to run kriging faster
+# was at 1000
+grd = SpatialPixels(SpatialPoints(makegrid(den_projected)))
+proj4string(grd) = CRS(prg)
+grd <- grd[den_projected,]
+gridded(grd) = TRUE
+```
+
+```{r}
+plot(grd)
+```
+
+
+```{r}
+# get elevation with elevatr package
+o3_elevs = get_elev_point(o3_projected, src="epqs")
+o3_elevs = as.data.frame(o3_elevs) %>% 
+  dplyr::select(site_name,elevation)
+
+o3_elevs %>% 
+  group_by(site_name) %>% 
+  summarise(mean_elev = mean(elevation))
+
+# join elevation column back to o3_projected
+o3_projected = merge(x=o3_projected,y=o3_elevs,by="site_name", duplicateGeoms = TRUE)
+#o3_projected
+
+```
+
+
+```{r}
+# create dataframe of summer months
+summer_o3 = as.data.frame(o3_projected)
+summer_o3 = summer_o3 %>%
+  dplyr::select(contains(c("site_name","lat","long","elevation","Apr","May","Jun","Jul","Aug","Sep","Oct")))
+
+# preview data
+#summer_o3
+
+
+# create summer months as spatial object
+coordinates(summer_o3) = c('long', 'lat')
+proj4string(summer_o3) = CRS(prg)
+summer_o3 = spTransform(summer_o3, CRS(prg))
+head(summer_o3)
+```
+
+```{r, message=FALSE, results='hide'}
+# create empty list to store variograms
+vgms = vector("list")
+
+# create list of column month names (therefore excluding first two) to iterate over
+cols = names(summer_o3)[-c(1,2)]
+
+# loop thru columns
+# var name = name of each month
+# reformulate to do month~1
+# store in vgms
+for(i in seq_along(cols)) {
+  var_name = as.name(names(summer_o3[,(2+i)]))
+  v = autofitVariogram(reformulate("1",var_name),summer_o3)
+  vgms[[i]] = v
+}
+
+# plot
+for(i in seq_along(cols)) {
+  plot(vgms[[i]])
+}
+```
+
+```{r}
+# create empty list to store variograms
+kriges = vector("list")
+kriges.cv = vector("list")
+rmses = vector("list")
+preds = vector("list")
+vars = vector("list")
+
+# create list of column month names (therefore excluding first two) to iterate over
+cols = names(summer_o3)[-c(1,2)]
+
+# loop thru columns
+# reformulate to create formula based on var_name for each month
+# krige + store
+# krige.cv and rmse + store
+for(i in seq_along(cols)) {
+  var_name = as.name(names(summer_o3[,(2+i)]))
+  k = autoKrige(reformulate("1",var_name),summer_o3,grd,model = c("Ste","Sph","Mat","Exp","Nug","Gau","Lin"))
+  k.cv = autoKrige.cv(reformulate("1",var_name),summer_o3,model = c("Ste","Sph","Mat","Exp","Nug","Gau","Lin"))
+  rmse = sqrt(mean(k.cv$krige.cv_output$residual^2))
+  mean_mth_pred = mean(k$krige_output$var1.pred)
+  mean_mth_var = mean(k$krige_output$var1.var)
+  kriges[[i]] =  k
+  kriges.cv[[i]] = k.cv
+  rmses[i] = rmse
+  preds[i] = mean_mth_pred
+  vars[i] = mean_mth_var
+}
+
+# plot
+for(i in seq_along(cols)) {
+  month = names(summer_o3[,(2+i)])
+  plot(kriges[[i]], ylab = "Semivariance", xlab = month)
+}
+```
+
+```{r}
+
+# add RMSE, predictions, and variance to gt table
+rmse_tibble = tibble(month_year = cols,
+                     rmse = rmses,
+                     mean_predicted_o3 = preds,
+                     mean_variance_o3 = vars)
+rmse_tibble
+rmse_gt = gt(rmse_tibble)
+rmse_gt
+
+```
+
+
+
+
