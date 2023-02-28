@@ -16,8 +16,8 @@ marshall_map = function(sf_point_object, field, title, Stitle, Ltitle) {
           plot.subtitle = element_text(hjust=0.5)) + 
     guides(colour=guide_legend(title=Ltitle)) 
 }
-
-data1<-read.csv("R:/Marshall Fire Health/marshall_w1.csv", sep=",")
+#Win computer - R:/Marshall Fire Health/marshall_w1.csv
+data1<-read.csv("/Volumes/research/Marshall Fire Health/marshall_w1.csv", sep=",")
 
 #geocoding - assiging lats and longs via Google API - will need key
 geo_marshall = data1 %>% 
