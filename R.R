@@ -16,17 +16,6 @@ origAddress = read.csv2("geocoding.csv", sep=",") %>%
   #filter(!is.na(full_address1)) %>% #temp until fixed
   mutate_geocode(full_address1, output="latlona") %>% 
   st_as_sf(coords = c("lon", "lat"),  crs = 4326)
-# 
-
-rcgeocode <- function(df) {
-  df %>% 
-    mutate(st_abr1 = ifelse(.$address_state1_v2==1, "CO", .$address_state1_other_v2),
-           full_address1 = paste0(.$address_st1_v2,", ",.$address_town1_v2,", ", .$st_abr,", ",.$address_zip1_v2)) %>% 
-    mutate_geocode(full_address1, output="latlona") %>% 
-    st_as_sf(coords = c("lon", "lat"),  crs = 4326)
-}
-
-#rcgeocode(origAddress)
 
 datesp = as.Date(origAddress$visit_datetime) #create date object
 sur_dates = format(datesp, format = "%b %y") #convert to mo yr format
