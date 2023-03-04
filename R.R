@@ -121,15 +121,50 @@ full_df = rbind(sep_geo(st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], 
                 sep_geo(st[19],com[19],twn[19],state[19],ostate[19],outus[19],zip[19], mvnm[19]))
 
 ##mapping
-world_bounds = maps::iso3166
-ggplot(full_df, aes(color=state))+
+#####world map
+ggplot(full_df, aes(color=move_in_year))+
   annotation_map_tile() +
   annotation_scale() +
   geom_sf() +
-  scale_color_manual(values = c("1" = "#d7191c",
-                                "2" = "#ffffbf",
-                                "3" = "#1a9641"))
+  scale_colour_viridis_c()+
+  ggtitle("Overall Distribution of unique addresses", "Need to filter down to people in CO for atleast 6mo since survey")+
+  theme(plot.title=element_text(hjust=0.5),
+        plot.subtitle = element_text(hjust=0.5))
 
+####Addresses only in CO (+showing all in US)
+us_boundary = USAboundaries::us_states(resolution="high") %>% 
+  filter(jurisdiction_type=="state"&state_abbr!=c("AK","HI")) %>% 
+  st_transform(st_crs(full_df))
+
+us_df = full_df %>% 
+  st_filter(.,us_boundary, .predicate = st_within)
+
+ggplot() +
+  annotation_map_tile(type = "hotstyle") +
+  geom_sf(data=us_boundary, col = "black",fill=NA, alpha = 0, size = 2) +
+  geom_sf(data=us_df, aes(color=move_in_year)) +
+  gghighlight::gghighlight(us_df$state==1) +
+  scale_colour_viridis_c("D") +
+  ggtitle("Overall Distribution of unique addresses", paste0("Addresses in CO: ",sum(us_df$state==1,na.rm=T))) +
+  theme(plot.title=element_text(hjust=0.5),
+        plot.subtitle = element_text(hjust=0.5))
+
+#Only CO
+co_boundary = USAboundaries::us_counties(states="Colorado",resolution="high") %>% 
+  st_transform(st_crs(full_df))
+
+co_df = full_df %>% 
+  st_filter(.,co_boundary, .predicate = st_within)
+
+ggplot() +
+  annotation_map_tile(type = "hotstyle") +
+  geom_sf(data=co_boundary, col = "black",fill=NA, alpha = 0, size = 2) +
+  geom_sf(data=co_df, aes(color=move_in_year)) +
+#  gghighlight::gghighlight(us_df$state==1) +
+  scale_colour_viridis_c("D") +
+  ggtitle("Colorado Addresses", paste0("Qualified Addresses",sum(us_df$state==1,na.rm=T))) +
+  theme(plot.title=element_text(hjust=0.5),
+        plot.subtitle = element_text(hjust=0.5))
 
 sur_dates = format(datesp, format = "%Y-%m-%d") #convert to mo yr format
 
