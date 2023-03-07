@@ -21,7 +21,9 @@ library(giscoR)
 library(units)
 
 #ust <- gisco_get_countries(country = "Contiguous United States", resolution = "03")
-ust = USAboundaries::us_counties(states= "Colorado", resolution="high") 
+ust = USAboundaries::us_counties(states= "Colorado", resolution="high") %>% 
+  st_transform(crs="EPSG:4269")
+st_crs(ust)
 plot(ust$geometry)
 ust_un = st_union(ust)
 plot(ust_un)
@@ -87,3 +89,18 @@ ggplot() +
   coord_sf() +
   theme_void() +
   theme(legend.position = "bottom")
+
+test=origAddress %>% 
+  dplyr::select(record_id, study_id, visit_datetime, which(colnames(origAddress)==st[1]):which(colnames(origAddress)==com[1])) %>% 
+  filter(origAddress[,twn[1]]!="") 
+#geocoding
+test=test %>% 
+  mutate(st_abr = ifelse(test[,state[1]]==1, "CO", test[,ostate[1]])) %>% 
+  mutate(st_abr = ifelse(test[,state[1]]==3, test[,outus[1]], .$st_abr)) %>% 
+  mutate(full_address = paste0(test[,st[1]],", ",
+                               test[,twn[1]],", ",
+                               .$st_abr,", ",
+                               test[,zip[1]]),
+         move_number=mvnm[1]) %>% 
+  mutate_geocode(full_address, output="latlona")
+st_crs(test)

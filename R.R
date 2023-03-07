@@ -7,6 +7,30 @@ library(ggspatial)
 library(raster)
 
 #function junction
+us_boundary = USAboundaries::us_states(resolution="high") %>% 
+  filter(jurisdiction_type=="state"&state_abbr!=c("AK","HI"))
+usa_map = function(point,var,polygon=us_boundary,color_1=NA,color_2=NA,title=NA,subtitle=NA,ltitle=NA){
+  poly=polygon
+  pnt=point
+  t=ifelse(is.na(title),"Title",title)
+  st=ifelse(is.na(title),"Subtitle",subtitle)
+  lt=ifelse(is.na(ltitle),"Legend",ltitle)
+  col1=ifelse(is.na(color_1),"black",color_1)
+  col2=ifelse(is.na(color_2),pnt$move_in_year,color_2)
+  ggplot() +
+    annotation_map_tile(type = "hotstyle") +
+    geom_sf(data=poly, col = col1 ,fill=NA, alpha = 0, size = 2) +
+    geom_sf(data=pnt, aes(col=var)) +
+#    scale_colour_viridis_c(paste0(lt)) +
+    ggtitle(t, st) +
+    theme(plot.title=element_text(hjust=0.5),
+          plot.subtitle = element_text(hjust=0.5))
+}
+nrow(us_df[,move_in_year])
+usa_map(us_df,st_drop_geometry(us_df[,"move_in_year"]))
+usa_map(co_df, co_boundary)
+
+us_df$move_in_year
 sep_geo = function(st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
   #only get populated survey dates
   t=origAddress %>% 
@@ -31,7 +55,7 @@ sep_geo = function(st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
   #make st object (maybe sp object?)
   t %>% 
     filter(!is.na(t$lon)) %>% 
-    st_as_sf(coords = c("lon", "lat"),  crs = 4326)
+    st_as_sf(coords = c("lon", "lat"),  crs = "EPSG:4326")
   })
 }
 
@@ -107,6 +131,7 @@ for(x in 1:nrow(origAddress)) {
 }
 
 full_df=sep_geo(st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], mvnm[1])
+st_crs(full_df)
 for(i in 2:19) {
   output = sep_geo(st[i],com[i],twn[i],state[i],ostate[i],outus[i],zip[i], mvnm[i])
   full_df = rbind(full_df,output)
@@ -128,8 +153,12 @@ us_boundary = USAboundaries::us_states(resolution="high") %>%
   filter(jurisdiction_type=="state"&state_abbr!=c("AK","HI")) %>% 
   st_transform(st_crs(full_df))
 us_un = st_union(us_boundary)
-us_elev = elevatr::get_elev_raster(us_un, z=1)
-crs(us_elev)
+us_elev = elevatr::get_elev_raster(us_un, z=1) %>% 
+  raster::
+  raster::projectExtent(4326)
+crs(us_df)
+st_crs((us_boundary))
+
 elev_clip = crop(us_elev,us_boundary)
 elev = mask(elev_clip,us_boundary)
 e_slp = terrain(elev, "slope")
