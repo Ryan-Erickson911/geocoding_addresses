@@ -10,7 +10,7 @@ library(raster)
 sep_geo = function(st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
   #only get populated survey dates
   t=origAddress %>% 
-    select(record_id, study_id, visit_datetime, which(colnames(origAddress)==st1):which(colnames(origAddress)==com1)) %>% 
+    dplyr::select(record_id, study_id, visit_datetime, which(colnames(origAddress)==st1):which(colnames(origAddress)==com1)) %>% 
     filter(origAddress[,twn1]!="") 
   #geocoding
   try({t=t %>% 
@@ -73,6 +73,7 @@ mvnm = seq(1:19)
 f=as.Date(unlist(strsplit(origAddress$visit_date,"\\s")), format = "%Y-%m-%d")
 f=f[!is.na(f)]
 fi=(strsplit(as.character(f),"-"))
+
 for(x in 1:79){print(fi[[x]][[2]])}
 
 #formatting dates
@@ -109,7 +110,7 @@ full_df=sep_geo(st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], mvnm[1])
 for(i in 2:19) {
   output = sep_geo(st[i],com[i],twn[i],state[i],ostate[i],outus[i],zip[i], mvnm[i])
   full_df = rbind(full_df,output)
-  }
+  }  #318 obs - do something about Thorton record
 
 ##mapping
 #####world map
@@ -127,7 +128,7 @@ us_boundary = USAboundaries::us_states(resolution="high") %>%
   filter(jurisdiction_type=="state"&state_abbr!=c("AK","HI")) %>% 
   st_transform(st_crs(full_df))
 us_un = st_union(us_boundary)
-us_elev = elevatr::get_elev_raster(us_un, z=8)
+us_elev = elevatr::get_elev_raster(us_un, z=1)
 crs(us_elev)
 elev_clip = crop(us_elev,us_boundary)
 elev = mask(elev_clip,us_boundary)
@@ -143,7 +144,6 @@ us_df = full_df %>%
 
 ggplot() +
   annotation_map_tile(type = "hotstyle") +
-  geom_raster(elev, aes())+
   geom_sf(data=us_boundary, col = "black",fill=NA, alpha = 0, size = 2) +
   geom_sf(data=us_df, aes(color=move_in_year)) +
   gghighlight::gghighlight(us_df$state==1) +
@@ -157,19 +157,27 @@ co_boundary = USAboundaries::us_counties(states="Colorado",resolution="high") %>
   st_transform(st_crs(full_df))
 
 co_df = full_df %>% 
-  st_filter(.,co_boundary, .predicate = st_within) %>% 
-  mutate(move_out_year = ifelse(move_out_year==0,), 
-         move_out_month = ifelse(move_out_month))
+  st_filter(.,co_boundary, .predicate = st_within) 
 
 ggplot() +
-  annotation_map_tile(type = "hotstyle") +
-  geom_sf(data=co_boundary, col = "black",fill=NA, alpha = 0, size = 2) +
-  geom_sf(data=co_df, aes(color=move_in_year)) +
-#  gghighlight::gghighlight(us_df$state==1) +
-  scale_colour_viridis_c("D") +
+ # annotation_map_tile(type = "hotstyle") +
+  geom_raster(data = hilldf_single,
+              aes(x, y, fill = hillshade),
+              show.legend = FALSE) +
+  scale_fill_distiller(palette = "Greys") +
+  new_scale_fill() +
+  geom_raster(data = mdtdf,
+              aes(x, y, fill = alt),
+              alpha = .7) +
+  scale_fill_hypso_tint_c(breaks = c(180, 250, 500, 1000,
+                                     1500,  2000, 2500,
+                                     3000, 3500, 4000)) +
+  geom_sf(data = ust,
+          colour = "black", fill = NA) +
+  coord_sf() +
   ggtitle("Colorado", paste0("Qualified Addresses")) +
   theme(plot.title=element_text(hjust=0.5),
-        plot.subtitle = element_text(hjust=0.5))
+        plot.subtitle = element_text(hjust=0.5)) 
 
 #format(datesp, format = "%Y-%m-%d") #convert to mo yr format
 
