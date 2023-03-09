@@ -131,6 +131,7 @@ for(x in 1:nrow(origAddress)) {
 }
 
 full_df=sep_geo(st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], mvnm[1])
+
 st_crs(full_df)
 for(i in 2:19) {
   output = sep_geo(st[i],com[i],twn[i],state[i],ostate[i],outus[i],zip[i], mvnm[i])
