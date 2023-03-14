@@ -26,11 +26,11 @@ usa_map = function(point,var,polygon=us_boundary,color_1=NA,color_2=NA,title=NA,
     theme(plot.title=element_text(hjust=0.5),
           plot.subtitle = element_text(hjust=0.5))
 }
-nrow(us_df[,move_in_year])
-usa_map(us_df,st_drop_geometry(us_df[,"move_in_year"]))
-usa_map(co_df, co_boundary)
+#nrow(us_df[,move_in_year])
+#usa_map(us_df,st_drop_geometry(us_df[,"move_in_year"]))
+#usa_map(co_df, co_boundary)
 
-us_df$move_in_year
+#us_df$move_in_year
 
 sep_geo = function(df, st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
   #only get populated survey dates
@@ -60,6 +60,51 @@ sep_geo = function(df, st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
   })
 }
 
+format.dates = function(df,in_mo,in_yr,out_mo,out_yr) {
+  f=as.Date(unlist(strsplit(df$visit_date,"\\s")), format = "%Y-%m-%d")
+  f=f[!is.na(f)]
+  fi=(strsplit(as.character(f),"-"))
+  ##seasons are first day of month
+  cb = as.data.frame(seq(1,28))
+  colnames(cb) = ("code")
+  cb = mutate(cb, year=seq(1994,2021))
+  cb = as.data.frame(seq(1,28))
+  colnames(cb) = ("code")
+  cb = mutate(cb, year=seq(1994,2021))
+  cbmo = as.data.frame(seq(1,16))
+  colnames(cbmo) = ("code")
+  mo = c(seq(1,12),12,3,6,9)
+  cbmo = mutate(cbmo, month=mo)
+  for(x in 1:nrow(df)) {
+    for(z in in_mo) {
+      ifelse(df[x,z] %in% cbmo$code, 
+             (df[x,z]=cbmo[df[x,z],"month"]), 
+             df[x,z])
+    }
+    for(z in out_mo) {
+      ifelse(df[x,z] %in% cbmo$code, 
+             (df[x,z]=cbmo[df[x,z],"month"]), 
+             df[x,z])
+      ifelse(df[x,z]==0, 
+             (df[x,z]=fi[[x]][[2]]), 
+             df[x,z])
+    }
+    for(z in in_yr) {
+      ifelse(df[x,z] %in% cb$code, 
+             (df[x,z]=cb[df[x,z],"year"]), 
+             df[x,z])
+    }
+    for(z in out_yr) {
+      ifelse(df[x,z] %in% cb$code, 
+             (df[x,z]=cb[df[x,z],"year"]), 
+             df[x,z])
+      ifelse(df[x,z]==0, 
+             (df[x,z]=fi[[x]][[1]]), 
+             df[x,z])
+    }  
+  }
+}
+
 #6mo or greater of exposure time 
 #create column that resembles hoy many days the participate stayed in CO up to the day the study was taken
 api_key = "AIzaSyAeoVaM_45SQ4G-lHeci1RhRNbhpxO3BDc"
@@ -67,18 +112,6 @@ register_google(key = api_key) #WILL NEED API KEEEEEEYYYYYYYYYYYYYYYYYYYY
 
 origAddress = read.csv2("geocoding.csv", sep=",") %>% 
   filter(visit_datetime!="") #takeout those without survey day
-
-##seasons are start of month, need monthly code book
-cb = as.data.frame(seq(1,28))
-colnames(cb) = ("code")
-cb = mutate(cb, year=seq(1994,2021))
-cb = as.data.frame(seq(1,28))
-colnames(cb) = ("code")
-cb = mutate(cb, year=seq(1994,2021))
-cbmo = as.data.frame(seq(1,16))
-colnames(cbmo) = ("code")
-mo = c(seq(1,12),12,3,6,9)
-cbmo = mutate(cbmo, month=mo)
 
 #make lists for loops
 movein_mo=grep("movedin_mo",names(origAddress),value=T)
@@ -95,41 +128,8 @@ ostate=c(grep("address_state\\d_ot",names(origAddress),value=T),
 outus=grep("_outus_",names(origAddress),value=T)
 zip=grep("address_zip",names(origAddress),value=T)
 mvnm = seq(1:19)
-f=as.Date(unlist(strsplit(origAddress$visit_date,"\\s")), format = "%Y-%m-%d")
-f=f[!is.na(f)]
-fi=(strsplit(as.character(f),"-"))
 
-for(x in 1:79){print(fi[[x]][[2]])}
-
-#formatting dates
-for(x in 1:nrow(origAddress)) {
-  for(z in movein_mo) {
-    ifelse(origAddress[x,z] %in% cbmo$code, 
-           (origAddress[x,z]=cbmo[origAddress[x,z],"month"]), 
-           origAddress[x,z])
-  }
-  for(z in moveout_mo) {
-    ifelse(origAddress[x,z] %in% cbmo$code, 
-           (origAddress[x,z]=cbmo[origAddress[x,z],"month"]), 
-           origAddress[x,z])
-    ifelse(origAddress[x,z]==0, 
-           (origAddress[x,z]=fi[[x]][[2]]), 
-           origAddress[x,z])
-  }
-  for(z in movein_yr) {
-    ifelse(origAddress[x,z] %in% cb$code, 
-           (origAddress[x,z]=cb[origAddress[x,z],"year"]), 
-           origAddress[x,z])
-  }
-  for(z in moveout_yr) {
-    ifelse(origAddress[x,z] %in% cb$code, 
-           (origAddress[x,z]=cb[origAddress[x,z],"year"]), 
-           origAddress[x,z])
-    ifelse(origAddress[x,z]==0, 
-           (origAddress[x,z]=fi[[x]][[1]]), 
-           origAddress[x,z])
-  }  
-}
+format.dates(origAddress,movein_mo,moveout_mo,movein_yr,moveout_yr)
 
 full_df=sep_geo(origAddress,st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], mvnm[1])
 for(i in 2:19) {
@@ -137,13 +137,12 @@ for(i in 2:19) {
   full_df = rbind(full_df,output)
   }  #318 obs - do something about Thorton record
 
-###special children
-add_dates=read.csv2("add_dates.csv",sep=",") %>% 
+add_dates=read.csv2("addthese.csv",sep=",") %>% 
   filter(visitdate!="") %>% 
   dplyr::select(study_id_checklist,visitdate)
 add=read.csv2("addthese.csv",sep=",") %>% 
   filter(study_id_resid_hist!="") %>% 
-  dplyr::select(-c(redcap_event_name, residential_history_questionnaire_complete, data_entered_by)) %>% 
+  dplyr::select(-c(redcap_event_name, residential_history_questionnaire_complete, data_entered_by,visitdate)) %>% 
   left_join(add_dates, by="study_id_checklist") %>% 
   mutate(data_checked_by=visitdate) %>% 
   dplyr::select(study_id_resid_hist,study_id_checklist,visitdate,everything(),-data_checked_by)
@@ -163,41 +162,9 @@ aostate=c(grep("address_state\\d_ot",names(add),value=T),
 aoutus=grep("_outus_",names(add),value=T)
 azip=grep("address_zip",names(add),value=T)
 amvnm=1:19
-af=as.Date(unlist(strsplit(add$visit_date,"\\s")), format = "%Y-%m-%d")
-af=af[!is.na(af)]
-afi=(strsplit(as.character(af),"-"))
 
-for(x in 1:79){print(afi[[x]][[2]])}
+format.dates(add,amovein_mo,amoveout_mo,amovein_yr,amoveout_yr)
 
-#formatting dates
-for(x in 1:nrow(add)) {
-  for(z in amovein_mo) {
-    ifelse(add[x,z] %in% cbmo$code, 
-           (add[x,z]=cbmo[add[x,z],"month"]), 
-           add[x,z])
-  }
-  for(z in amoveout_mo) {
-    ifelse(add[x,z] %in% cbmo$code, 
-           (add[x,z]=cbmo[add[x,z],"month"]), 
-           add[x,z])
-    ifelse(add[x,z]==0, 
-           (add[x,z]=afi[[x]][[2]]), 
-           add[x,z])
-  }
-  for(z in amovein_yr) {
-    ifelse(add[x,z] %in% cb$code, 
-           (add[x,z]=cb[add[x,z],"year"]), 
-           add[x,z])
-  }
-  for(z in amoveout_yr) {
-    ifelse(add[x,z] %in% cb$code, 
-           (add[x,z]=cb[add[x,z],"year"]), 
-           add[x,z])
-    ifelse(add[x,z]==0, 
-           (add[x,z]=afi[[x]][[1]]), 
-           add[x,z])
-  }  
-}
 add_df=sep_geo(add,ast[1],acom[1],atwn[1],astate[1],aostate[1],aoutus[1],azip[1],amvnm[1])
 for(i in 2:19) {
   output = sep_geo(add,ast[i],acom[i],atwn[i],astate[i],aostate[i],aoutus[i],azip[i],amvnm[i])
@@ -209,8 +176,6 @@ full_df$move_in_month=as.integer(full_df$move_in_month)
 full_df$move_out_month=as.integer(full_df$move_out_month)
 full_df$move_in_year=as.integer(full_df$move_in_year)
 full_df$move_out_year=as.integer(full_df$move_out_year)
-
-
 
 co_pnts = full_df %>%  
   filter(state==1,
@@ -225,8 +190,9 @@ co_pnts = full_df %>%
 co_300m_buffer = st_buffer(co_pnts,dist=300)
 co_1000m_buffer = st_buffer(co_pnts,dist=1000)
 co_2000m_buffer = st_buffer(co_pnts,dist=2000)
-
+#map cause cool
 ggplot()+
+  geom_sf(data=co_counties, aes(col=awater))+
   geom_sf(data=co_2000m_buffer,aes(color=study_id))+
   geom_sf(data=co_1000m_buffer,aes(color=study_id))+
   geom_sf(data=co_300m_buffer,aes(color=study_id))+
@@ -238,11 +204,9 @@ PM2.5_exposure_co = co_300m_buffer %>%
          move_out = paste0(move_out_month,"-",move_out_year)) %>%
   mutate(move_in,as.Date(move_in, format = "%Y-%m"),
          move_out,as.Date(move_out, format = "%Y-%m")) %>% 
-  dplyr::select(study_id,move_in,move_out,geometry) %>% 
-  mutate(January)
+  dplyr::select(study_id,move_in,move_out,geometry) 
 d1=as.Date(paste0("202001","01"), "%Y%m%d")
 d2=as.Date(paste0("202212","31"), "%Y%m%d")
-
 
 months <- format(seq(d1,d2,by="month"), "%b.%Y")
 # Add multiple empty columns
