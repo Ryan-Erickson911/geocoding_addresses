@@ -31,11 +31,12 @@ usa_map(us_df,st_drop_geometry(us_df[,"move_in_year"]))
 usa_map(co_df, co_boundary)
 
 us_df$move_in_year
-sep_geo = function(st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
+
+sep_geo = function(df, st1,com1,twn1,state1,ostate1,outus1,zip1,mvnm1) {
   #only get populated survey dates
-  t=origAddress %>% 
-    dplyr::select(record_id, study_id, visit_datetime, which(colnames(origAddress)==st1):which(colnames(origAddress)==com1)) %>% 
-    filter(origAddress[,twn1]!="") 
+  t=df %>% 
+    dplyr::select(record_id, study_id, visit_datetime, which(colnames(df)==st1):which(colnames(df)==com1)) %>% 
+    filter(df[,twn1]!="") 
   #geocoding
   try({t=t %>% 
     mutate(st_abr = ifelse(t[,state1]==1, "CO", t[,ostate1])) %>% 
@@ -130,15 +131,142 @@ for(x in 1:nrow(origAddress)) {
   }  
 }
 
-full_df=sep_geo(st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], mvnm[1])
-
-st_crs(full_df)
+full_df=sep_geo(origAddress,st[1],com[1],twn[1],state[1],ostate[1],outus[1],zip[1], mvnm[1])
 for(i in 2:19) {
-  output = sep_geo(st[i],com[i],twn[i],state[i],ostate[i],outus[i],zip[i], mvnm[i])
+  output = sep_geo(origAddress,st[i],com[i],twn[i],state[i],ostate[i],outus[i],zip[i], mvnm[i])
   full_df = rbind(full_df,output)
   }  #318 obs - do something about Thorton record
 
-##mapping
+###special children
+add_dates=read.csv2("add_dates.csv",sep=",") %>% 
+  filter(visitdate!="") %>% 
+  dplyr::select(study_id_checklist,visitdate)
+add=read.csv2("addthese.csv",sep=",") %>% 
+  filter(study_id_resid_hist!="") %>% 
+  dplyr::select(-c(redcap_event_name, residential_history_questionnaire_complete, data_entered_by)) %>% 
+  left_join(add_dates, by="study_id_checklist") %>% 
+  mutate(data_checked_by=visitdate) %>% 
+  dplyr::select(study_id_resid_hist,study_id_checklist,visitdate,everything(),-data_checked_by)
+names(add)[1:3]=c("record_id","study_id","visit_datetime")
+
+amovein_mo=grep("movedin_mo",names(add),value=T)
+amoveout_mo=grep("movedout_mo",names(add),value=T)
+amovein_yr=grep("movedin_yr",names(add),value=T)
+amoveout_yr=grep("movedout_yr",names(add),value=T)
+ast=grep("^address_st\\d",names(add),value=T)
+acom=grep("address_comment",names(add),value=T)
+atwn=grep("address_town",names(add),value=T)
+astate=c(grep("address_state\\d$",names(add),value=T),
+        grep("address_state\\d\\d$",names(add),value=T))
+aostate=c(grep("address_state\\d_ot",names(add),value=T),
+         grep("address_state\\d\\d_ot",names(add),value=T))
+aoutus=grep("_outus_",names(add),value=T)
+azip=grep("address_zip",names(add),value=T)
+amvnm=1:19
+af=as.Date(unlist(strsplit(add$visit_date,"\\s")), format = "%Y-%m-%d")
+af=af[!is.na(af)]
+afi=(strsplit(as.character(af),"-"))
+
+for(x in 1:79){print(afi[[x]][[2]])}
+
+#formatting dates
+for(x in 1:nrow(add)) {
+  for(z in amovein_mo) {
+    ifelse(add[x,z] %in% cbmo$code, 
+           (add[x,z]=cbmo[add[x,z],"month"]), 
+           add[x,z])
+  }
+  for(z in amoveout_mo) {
+    ifelse(add[x,z] %in% cbmo$code, 
+           (add[x,z]=cbmo[add[x,z],"month"]), 
+           add[x,z])
+    ifelse(add[x,z]==0, 
+           (add[x,z]=afi[[x]][[2]]), 
+           add[x,z])
+  }
+  for(z in amovein_yr) {
+    ifelse(add[x,z] %in% cb$code, 
+           (add[x,z]=cb[add[x,z],"year"]), 
+           add[x,z])
+  }
+  for(z in amoveout_yr) {
+    ifelse(add[x,z] %in% cb$code, 
+           (add[x,z]=cb[add[x,z],"year"]), 
+           add[x,z])
+    ifelse(add[x,z]==0, 
+           (add[x,z]=afi[[x]][[1]]), 
+           add[x,z])
+  }  
+}
+add_df=sep_geo(add,ast[1],acom[1],atwn[1],astate[1],aostate[1],aoutus[1],azip[1],amvnm[1])
+for(i in 2:19) {
+  output = sep_geo(add,ast[i],acom[i],atwn[i],astate[i],aostate[i],aoutus[i],azip[i],amvnm[i])
+  add_df = rbind(add_df,output)
+} 
+
+full_df=rbind(full_df,add_df)
+full_df$move_in_month=as.integer(full_df$move_in_month)
+full_df$move_out_month=as.integer(full_df$move_out_month)
+full_df$move_in_year=as.integer(full_df$move_in_year)
+full_df$move_out_year=as.integer(full_df$move_out_year)
+
+
+
+co_pnts = full_df %>%  
+  filter(state==1,
+         nchar(move_in_year)==4) %>% 
+         #,
+         #!is.na(zipcode)) %>% 
+  mutate(yr_diff=move_out_year-move_in_year,
+         mo_diff=(move_out_month-move_in_month)+(12*yr_diff)) %>% 
+  filter(yr_diff<=2&yr_diff>=0,
+         mo_diff>=6) %>% 
+  dplyr::select(record_id,study_id,visit_date,mo_diff,yr_diff,everything())
+co_300m_buffer = st_buffer(co_pnts,dist=300)
+co_1000m_buffer = st_buffer(co_pnts,dist=1000)
+co_2000m_buffer = st_buffer(co_pnts,dist=2000)
+
+ggplot()+
+  geom_sf(data=co_2000m_buffer,aes(color=study_id))+
+  geom_sf(data=co_1000m_buffer,aes(color=study_id))+
+  geom_sf(data=co_300m_buffer,aes(color=study_id))+
+  geom_sf(data=co_pnts,pch=3,cex=1)
+
+PM2.5_exposure_co = co_300m_buffer %>% 
+  filter(move_in_year==2020) %>% 
+  mutate(move_in = paste0(move_in_month,"-",move_in_year),
+         move_out = paste0(move_out_month,"-",move_out_year)) %>%
+  mutate(move_in,as.Date(move_in, format = "%Y-%m"),
+         move_out,as.Date(move_out, format = "%Y-%m")) %>% 
+  dplyr::select(study_id,move_in,move_out,geometry) %>% 
+  mutate(January)
+d1=as.Date(paste0("202001","01"), "%Y%m%d")
+d2=as.Date(paste0("202212","31"), "%Y%m%d")
+
+
+months <- format(seq(d1,d2,by="month"), "%b.%Y")
+# Add multiple empty columns
+PM2.5_exposure_co[ ,months] <- NA
+
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+
+#############mapping
 #####world map
 ggplot(full_df, aes(color=move_in_year))+
   annotation_map_tile() +
@@ -173,7 +301,7 @@ us_df = full_df %>%
   st_filter(.,us_boundary, .predicate = st_within)
 
 ggplot() +
-  annotation_map_tile(type = "hotstyle") +
+#  annotation_map_tile(type = "hotstyle") +
   geom_sf(data=us_boundary, col = "black",fill=NA, alpha = 0, size = 2) +
   geom_sf(data=us_df, aes(color=move_in_year)) +
   gghighlight::gghighlight(us_df$state==1) +
@@ -191,18 +319,8 @@ co_df = full_df %>%
 
 ggplot() +
  # annotation_map_tile(type = "hotstyle") +
-  geom_raster(data = hilldf_single,
-              aes(x, y, fill = hillshade),
-              show.legend = FALSE) +
-  scale_fill_distiller(palette = "Greys") +
-  new_scale_fill() +
-  geom_raster(data = mdtdf,
-              aes(x, y, fill = alt),
-              alpha = .7) +
-  scale_fill_hypso_tint_c(breaks = c(180, 250, 500, 1000,
-                                     1500,  2000, 2500,
-                                     3000, 3500, 4000)) +
-  geom_sf(data = ust,
+  geom_sf(data=co_boundary) +
+  geom_sf(data = co_df,
           colour = "black", fill = NA) +
   coord_sf() +
   ggtitle("Colorado", paste0("Qualified Addresses")) +
